@@ -28,7 +28,7 @@ The page asks before it runs a pane from a site it has not seen. Allow it, and t
 - Plays sound in its own player:
   - a **waveform** of the whole file to click, tap or drag to any point (a plain bar for files over 40 MB, or when the server does not allow the file to be read);
   - title, artist, album and **cover art** from the file's tags (ID3v2 in MP3, Vorbis comments in Ogg and FLAC), or the file name;
-  - big buttons: play and pause, back 15 s, forward 30 s, speed (0.75× to 2×), repeat, mute, and a volume slider;
+  - one calm centred card: big play and pause, back 15 s, forward 30 s, then pills for speed (0.75× to 2×), repeat, mute, a **sleep timer** (15, 30 or 60 min, then it pauses), **Download** and Open, and a volume slider; type, size and length sit in one quiet line at the bottom;
   - keys while it has focus: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> 5 s, <kbd>↑</kbd> <kbd>↓</kbd> volume, <kbd>M</kbd> mute;
   - the phone's lock screen and the keyboard's media keys work too (Media Session);
   - it remembers where you stopped, in this browser only, and offers **Resume from m:ss**.

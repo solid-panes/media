@@ -6,14 +6,15 @@
 // type the store already knows to be video/*, audio/* or image/*. Draws a card with the file name,
 // its size and type (from a HEAD request with a short Accept), the browser's own player or the
 // picture, and Open and Download links. If the browser cannot play the file it says so and offers
-// the Open link. Sound gets its own player: a waveform to click or drag (drawn from the decoded
-// file, or a plain bar when it cannot be read), big transport buttons, speed, volume, loop, title,
-// artist and cover from the file's tags (ID3v2, Vorbis comments, FLAC), lock-screen controls through
-// the Media Session API, keyboard shortcuts, and "Resume from" the last position (kept in
-// localStorage, the only thing it keeps). It imports nothing, builds the DOM with
-// createElement/textContent (never innerHTML), and writes nothing to the server.
+// the Open link. Sound gets its own player, one calm centred card: the cover and title from the
+// file's tags (ID3v2, Vorbis comments, FLAC), a waveform to click or drag (drawn from the decoded
+// file, or a plain bar when it cannot be read), back 15 s / play / forward 30 s, pills for speed,
+// loop, mute, a sleep timer, Download and Open, volume, the file's type, size and length in one
+// line, lock-screen controls through the Media Session API, keyboard shortcuts, and "Resume from"
+// the last position (kept in localStorage, the only thing it keeps). It imports nothing, builds
+// the DOM with createElement/textContent (never innerHTML), and writes nothing to the server.
 //
-// https://solid-panes.github.io/media/ · licence: MIT (see LICENSE).
+// https://solid-panes.github.io/media/ · licence: AGPL-3.0-or-later (see LICENSE).
 
 const KINDS = {
   video: { mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime' },
@@ -31,6 +32,7 @@ const CSS = `
 .mdp.media-pane { max-width: 960px; margin: 0 auto }
 .mdp-card { border: 1px solid #e3e7ef; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 8px 24px rgba(20, 30, 60, .06); overflow: hidden }
 .mdp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 16px 12px }
+.mdp-head[hidden] { display: none }
 .mdp-title { flex: 1 1 240px; min-width: 0 }
 .mdp-name { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 700; color: #172042; overflow-wrap: anywhere }
 .mdp-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: #5b6478 }
@@ -49,61 +51,70 @@ const CSS = `
 .mdp-img { display: block; max-width: 100%; max-height: 75vh; height: auto; object-fit: contain }
 .mdp-stage.mdp-sound { padding: 28px 16px }
 .mdp-audio { display: block; width: 100%; max-width: 560px }
-.mdp-stage.mdp-sound.mdp-tuned { display: block; position: relative; overflow: hidden; padding: 28px 24px 24px; background: linear-gradient(160deg, #f6f8fd 0%, #eef1fa 100%) }
-.mdp-backdrop { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(48px) saturate(1.4); opacity: .22; pointer-events: none }
-.mdp-player { position: relative; max-width: 720px; margin: 0 auto; padding: 20px; border-radius: 20px; background: rgba(255, 255, 255, .86); border: 1px solid rgba(214, 222, 238, .9); box-shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 12px 32px rgba(32, 48, 96, .10); outline: none }
-.mdp-player:focus-visible { box-shadow: 0 0 0 3px #6f9cf0, 0 12px 32px rgba(32, 48, 96, .10) }
-.mdp-track { display: flex; align-items: center; gap: 18px; min-width: 0 }
-.mdp-cover { flex: 0 0 auto; width: 132px; height: 132px; border-radius: 14px; overflow: hidden; background: linear-gradient(135deg, #3b7bf0, #6a4fe0 55%, #c04fb4); box-shadow: 0 8px 22px rgba(40, 50, 110, .22); display: flex; align-items: center; justify-content: center }
-.mdp-cover img { display: block; width: 100%; height: 100%; object-fit: cover }
-.mdp-cover svg { width: 46%; height: 46%; color: rgba(255, 255, 255, .92) }
-.mdp-info { flex: 1 1 auto; min-width: 0 }
-.mdp-over { margin: 0 0 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #2f6fde }
-.mdp-song { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 750; letter-spacing: -.015em; color: #141a33; overflow-wrap: anywhere }
-.mdp-artist { margin: 4px 0 0; font-size: 15.5px; font-weight: 600; color: #3d4766; overflow-wrap: anywhere }
-.mdp-album { margin: 2px 0 0; font-size: 13.5px; color: #6b748c; overflow-wrap: anywhere }
-.mdp-resume { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 0; padding: 6px 6px 6px 14px; border-radius: 14px; background: #eaf1ff; color: #1f3f86; font-size: 14px; font-weight: 600 }
+.mdp-card.mdp-card-sound { border: 0; background: transparent; box-shadow: none; overflow: visible }
+.mdp-stage.mdp-sound.mdp-tuned { display: block; padding: 4px 0 8px; background: transparent; border-top: 0 }
+.mdp-player { position: relative; max-width: 560px; margin: 0 auto; padding: 28px 28px 20px; border-radius: 24px; background: #fff; border: 1px solid #e4e8f0; box-shadow: 0 1px 2px rgba(20, 30, 60, .04), 0 10px 30px rgba(32, 48, 96, .08); outline: none; text-align: center }
+.mdp-player:focus-visible { box-shadow: 0 0 0 3px #6f9cf0, 0 10px 30px rgba(32, 48, 96, .08) }
+.mdp-cover { position: relative; width: min(100%, 320px); aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, #3b7bf0, #6a4fe0 55%, #c04fb4); box-shadow: 0 10px 28px rgba(40, 50, 110, .20); display: flex; align-items: center; justify-content: center }
+.mdp-cover img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover }
+.mdp-cover svg { width: 38%; height: 38%; color: rgba(255, 255, 255, .9); filter: drop-shadow(0 4px 10px rgba(20, 20, 60, .18)) }
+.mdp-cover::before, .mdp-cover::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none }
+.mdp-cover::before { width: 70%; height: 70%; left: -18%; top: -22%; background: radial-gradient(circle, rgba(255, 255, 255, .30), rgba(255, 255, 255, 0) 70%) }
+.mdp-cover::after { width: 34%; height: 34%; right: 9%; bottom: 10%; border: 10px solid rgba(255, 255, 255, .16) }
+.mdp-cover.mdp-has-art::before, .mdp-cover.mdp-has-art::after { display: none }
+.mdp-song { margin: 22px 0 0; font-size: 22px; line-height: 1.25; font-weight: 750; letter-spacing: -.01em; color: #141a33; overflow-wrap: anywhere }
+.mdp-sub { margin: 4px 0 0; font-size: 15px; color: #646d82; overflow-wrap: anywhere }
+.mdp-sub[hidden], .mdp-sub [hidden] { display: none }
+.mdp-resume { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 18px 0 0; padding: 6px 6px 6px 14px; border-radius: 16px; background: #eef3ff; color: #1f3f86; font-size: 14px; font-weight: 600; text-align: left }
 .mdp-resume span { flex: 1 1 auto }
 .mdp-resume[hidden] { display: none }
-.mdp-scrub { position: relative; margin: 20px 0 0; height: 72px; cursor: pointer; touch-action: pan-y; border-radius: 10px; outline: none }
+.mdp-scrub { position: relative; margin: 22px 0 0; height: 64px; cursor: pointer; touch-action: pan-y; border-radius: 10px; outline: none }
 .mdp-scrub:focus-visible { box-shadow: 0 0 0 3px #6f9cf0 }
 .mdp-scrub canvas { display: block; width: 100%; height: 100% }
-.mdp-scrub .mdp-track-bar { position: absolute; left: 0; right: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 99px; background: #d9e0ee; overflow: hidden }
+.mdp-scrub .mdp-track-bar { position: absolute; left: 0; right: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 99px; background: #e2e7f0; overflow: hidden }
 .mdp-scrub .mdp-fill { height: 100%; width: 0; border-radius: 99px; background: #2f6fde }
 .mdp-scrub.mdp-has-wave .mdp-track-bar { display: none }
 .mdp-scrub:not(.mdp-has-wave) canvas { display: none }
-.mdp-scrub:not(.mdp-has-wave) { height: 32px }
+.mdp-scrub:not(.mdp-has-wave) { height: 44px }
 .mdp-tip { position: absolute; bottom: calc(100% + 4px); padding: 2px 8px; border-radius: 8px; background: #172042; color: #fff; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; transform: translateX(-50%); pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity .12s }
 .mdp-scrub:hover .mdp-tip { opacity: 1 }
-.mdp-times { display: flex; justify-content: space-between; margin-top: 6px; font-size: 13px; font-weight: 600; color: #5b6478; font-variant-numeric: tabular-nums }
-.mdp-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 12px }
-.mdp-side { display: flex; align-items: center; gap: 6px; justify-self: start }
-.mdp-transport { display: flex; align-items: center; gap: 14px }
-.mdp-vol { display: flex; align-items: center; gap: 4px; justify-self: end; min-width: 0 }
+.mdp-times { display: flex; justify-content: space-between; margin-top: 4px; font-size: 13px; color: #646d82; font-variant-numeric: tabular-nums; text-align: left }
+.mdp-transport { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 14px 0 0 }
 .mdp .mdp-ctl { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 48px; height: 48px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: #26304f; font: 700 14px/1 ${STACK}; font-variant-numeric: tabular-nums; cursor: pointer; -webkit-tap-highlight-color: transparent }
-.mdp .mdp-ctl:hover { background: #edf1f9 }
-.mdp .mdp-ctl:active { transform: scale(.94) }
+.mdp .mdp-ctl:hover { background: #f0f3f9 }
+.mdp .mdp-ctl:active { transform: scale(.95) }
 .mdp .mdp-ctl:focus-visible { outline: 3px solid #6f9cf0; outline-offset: 2px }
 .mdp .mdp-ctl svg { width: 26px; height: 26px; display: block }
-.mdp .mdp-ctl[aria-pressed="true"] { color: #2f6fde; background: #e6efff }
-.mdp .mdp-ctl.mdp-speed { min-width: 56px; border: 1.5px solid #d5dced }
-.mdp .mdp-ctl.mdp-play { width: 68px; height: 68px; background: #2f6fde; color: #fff; box-shadow: 0 6px 18px rgba(47, 111, 222, .35) }
-.mdp .mdp-ctl.mdp-play:hover { background: #255fc4 }
-.mdp .mdp-ctl.mdp-play svg { width: 30px; height: 30px }
+.mdp .mdp-ctl.mdp-skip { width: 56px; height: 56px; padding: 0 }
 .mdp .mdp-ctl.mdp-skip svg { width: 30px; height: 30px }
+.mdp .mdp-ctl.mdp-play { width: 76px; height: 76px; padding: 0; background: #2f6fde; color: #fff; box-shadow: 0 6px 18px rgba(47, 111, 222, .32) }
+.mdp .mdp-ctl.mdp-play:hover { background: #255fc4 }
+.mdp .mdp-ctl.mdp-play svg { width: 32px; height: 32px }
+.mdp-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 18px 0 0 }
+.mdp .mdp-pill { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 48px; height: 48px; padding: 0 16px; border: 1px solid #e1e6ef; border-radius: 999px; background: #fff; color: #26304f; font: 650 14px/1 ${STACK}; font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent }
+.mdp .mdp-pill:hover { background: #f3f6fb; border-color: #d3dbe8 }
+.mdp .mdp-pill:active { transform: scale(.97) }
+.mdp .mdp-pill:focus-visible { outline: 3px solid #6f9cf0; outline-offset: 2px }
+.mdp .mdp-pill svg { width: 19px; height: 19px; display: block; flex: 0 0 auto }
+.mdp .mdp-pill[aria-pressed="true"] { background: #eaf1ff; border-color: #9dbcf3; color: #1f55b8 }
+.mdp .mdp-pill.mdp-download { background: #2f6fde; border-color: #2f6fde; color: #fff; padding: 0 20px }
+.mdp .mdp-pill.mdp-download:hover { background: #255fc4; border-color: #255fc4 }
 .mdp .mdp-resume .mdp-ctl { height: 44px; min-width: 44px; padding: 0 14px; background: #2f6fde; color: #fff }
 .mdp .mdp-resume .mdp-ctl.mdp-dismiss { background: transparent; color: #1f3f86; padding: 0 }
 .mdp .mdp-resume .mdp-ctl.mdp-dismiss svg { width: 20px; height: 20px }
-.mdp-range { -webkit-appearance: none; appearance: none; width: 120px; height: 44px; margin: 0; background: transparent; cursor: pointer; --mdp-v: 100% }
+.mdp-vol { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 320px; margin: 10px auto 0; color: #7a8399 }
+.mdp-vol svg { width: 20px; height: 20px; flex: 0 0 auto; display: block }
+.mdp-range { -webkit-appearance: none; appearance: none; flex: 1 1 auto; min-width: 0; width: auto; height: 44px; margin: 0; background: transparent; cursor: pointer; --mdp-v: 100% }
 .mdp-range:focus-visible { outline: 3px solid #6f9cf0; outline-offset: 2px; border-radius: 8px }
-.mdp-range::-webkit-slider-runnable-track { height: 8px; border-radius: 99px; background: linear-gradient(to right, #2f6fde var(--mdp-v), #d9e0ee var(--mdp-v)) }
-.mdp-range::-moz-range-track { height: 8px; border-radius: 99px; background: #d9e0ee }
-.mdp-range::-moz-range-progress { height: 8px; border-radius: 99px; background: #2f6fde }
-.mdp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -8px; border-radius: 50%; background: #fff; border: 2px solid #2f6fde; box-shadow: 0 2px 6px rgba(20, 30, 60, .2) }
-.mdp-range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2px solid #2f6fde; box-shadow: 0 2px 6px rgba(20, 30, 60, .2) }
-.mdp-keys { margin: 14px 0 0; font-size: 12px; color: #7a8399; text-align: center }
-.mdp-keys span { display: inline-block; margin: 0 9px; white-space: nowrap }
-.mdp-keys kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 1px; border: 1px solid #d5dced; border-bottom-width: 2px; border-radius: 5px; background: #fff; font: 600 11px/17px ${STACK}; color: #3d4559; text-align: center }
+.mdp-range::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(to right, #2f6fde var(--mdp-v), #e2e7f0 var(--mdp-v)) }
+.mdp-range::-moz-range-track { height: 6px; border-radius: 99px; background: #e2e7f0 }
+.mdp-range::-moz-range-progress { height: 6px; border-radius: 99px; background: #2f6fde }
+.mdp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -10px; border-radius: 50%; background: #fff; border: 2px solid #2f6fde; box-shadow: 0 2px 6px rgba(20, 30, 60, .2) }
+.mdp-range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 2px solid #2f6fde; box-shadow: 0 2px 6px rgba(20, 30, 60, .2) }
+.mdp-keys { margin: 16px 0 0; font-size: 12px; color: #8a92a6 }
+.mdp-keys span { display: inline-block; margin: 0 7px; white-space: nowrap }
+.mdp-keys kbd { display: inline-block; min-width: 18px; padding: 0 4px; margin: 0 1px; border: 1px solid #e1e6ef; border-radius: 5px; background: #fafbfd; font: 600 11px/16px ${STACK}; color: #5b6478; text-align: center }
+.mdp-details { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #eef1f6; font-size: 12.5px; color: #8a92a6; font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
 .mdp-fallback { margin: 0; padding: 28px 16px; text-align: center; color: #3d4559 }
 .mdp-fallback b { display: block; margin-bottom: 4px; font-size: 16px; color: #172042 }
 .mdp-fallback a { color: #1f4fa8; font-weight: 600 }
@@ -114,20 +125,14 @@ const CSS = `
   .mdp-name { font-size: 16.5px }
   .mdp-actions { width: 100% }
   .mdp .mdp-btn { flex: 1 1 0; justify-content: center }
-  .mdp-stage.mdp-sound.mdp-tuned { padding: 12px 8px }
-  .mdp-player { padding: 16px 14px }
-  .mdp-track { gap: 14px }
-  .mdp-cover { width: 88px; height: 88px; border-radius: 12px }
-  .mdp-song { font-size: 19px }
-  .mdp-artist { font-size: 14.5px }
-  .mdp-scrub { height: 60px; margin-top: 16px }
-  .mdp-bar { grid-template-columns: auto 1fr auto; grid-template-areas: "loop transport speed" "vol vol vol"; row-gap: 6px }
-  .mdp-side { display: contents }
-  .mdp .mdp-loop { grid-area: loop }
-  .mdp .mdp-speed { grid-area: speed }
-  .mdp-transport { grid-area: transport; justify-self: center; gap: 6px }
-  .mdp-vol { grid-area: vol; justify-self: stretch }
-  .mdp-range { flex: 1 1 auto; width: auto }
+  .mdp-player { padding: 20px 16px 16px; border-radius: 20px }
+  .mdp-cover { width: min(78%, 260px); border-radius: 16px }
+  .mdp-song { margin-top: 18px; font-size: 20px }
+  .mdp-sub { font-size: 14.5px }
+  .mdp-scrub { height: 56px; margin-top: 18px }
+  .mdp-transport { gap: 14px }
+  .mdp-pills { gap: 8px }
+  .mdp .mdp-pill { padding: 0 14px }
   .mdp-keys { display: none }
 }
 `
@@ -382,6 +387,10 @@ const ICONS = {
   vol: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4z', 'M15.5 9a4 4 0 0 1 0 6', 'M18 6.5a7.5 7.5 0 0 1 0 11'],
   mute: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4z', 'M16 9.5l5 5', 'M21 9.5l-5 5'],
   close: ['M6 6l12 12', 'M18 6L6 18'],
+  download: ['M12 4v11', 'M7 10.5l5 5 5-5', 'M5 19.5h14'],
+  open: ['M14 4.5h5.5V10', 'M19.5 4.5L11 13', 'M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10'],
+  moon: ['M19.5 14.5A8 8 0 1 1 9.5 4.5a6.5 6.5 0 0 0 10 10z'],
+  quiet: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4z'],
   note: ['M9 18V6l11-2v12', 'M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3z', 'M20 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z']
 }
 const FILLED = { play: 1, pause: 1 }
@@ -441,6 +450,7 @@ function peaksOf (buffer, n) {
 const WAVE_LIMIT = 40 * 1024 * 1024 // bigger files get the plain bar
 const TAG_BYTES = 512 * 1024 // what a ranged read asks for when the whole file is too big
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75]
+const SLEEPS = [0, 15, 30, 60] // minutes; 0 is off
 const ACCEPT_AUDIO = 'audio/*, */*;q=0.1'
 
 // Reads a response body, up to cap bytes. Returns { bytes, whole }.
@@ -498,7 +508,15 @@ const pane = {
     const titleBox = el('div', 'mdp-title')
     titleBox.appendChild(el('h2', 'mdp-name', name))
     const meta = el('div', 'mdp-meta')
-    const chip = (text, cls) => { const c = el('span', 'mdp-chip' + (cls ? ' ' + cls : ''), text); meta.appendChild(c); return c }
+    // The same facts go in chips under the name, and (for sound) in one muted line in the player.
+    const facts = { type: '', size: '', length: '', status: '' }
+    let showFacts = null
+    const chip = (text, cls, fact) => {
+      const c = el('span', 'mdp-chip' + (cls ? ' ' + cls : ''), text)
+      meta.appendChild(c)
+      if (fact) { facts[fact] = text; if (showFacts) showFacts() }
+      return c
+    }
     const kindChip = chip(LABELS[kind], 'mdp-kind')
     titleBox.appendChild(meta)
 
@@ -531,11 +549,16 @@ const pane = {
       a.rel = 'noopener noreferrer'
       box.appendChild(a)
       stage.className = 'mdp-stage'
+      card.classList.remove('mdp-card-sound')
+      head.hidden = false
       stage.replaceChildren(box)
     }
 
     function draw () {
       kindChip.textContent = LABELS[kind]
+      card.classList.toggle('mdp-card-sound', kind === 'audio')
+      head.hidden = kind === 'audio' // the sound player carries its own title, links and details
+      showFacts = null
       if (kind === 'image') {
         stage.className = 'mdp-stage mdp-checker'
         const img = el('img', 'mdp-img')
@@ -561,7 +584,7 @@ const pane = {
       }
       media.addEventListener('loadedmetadata', () => {
         const t = humanTime(media.duration)
-        if (t && !durationChip) durationChip = chip(t)
+        if (t && !durationChip) durationChip = chip(t, null, 'length')
       })
       media.addEventListener('error', () => fallback('This browser can\'t play this file.'))
       if (kind === 'audio') {
@@ -583,26 +606,25 @@ const pane = {
       audio.controls = false
       audio.hidden = true
 
-      const backdrop = el('div', 'mdp-backdrop')
       const player = el('div', 'mdp-player')
       player.tabIndex = 0
       player.setAttribute('role', 'group')
       player.setAttribute('aria-roledescription', 'audio player')
       player.setAttribute('aria-keyshortcuts', 'Space ArrowLeft ArrowRight ArrowUp ArrowDown M')
 
-      // Title, artist, album and cover; the file name until the tags are read.
+      // Cover, title, and "artist · album"; the file name and a cover made from it until the tags are read.
       const meta = { title: name.replace(/\.[a-z0-9]+$/i, '') || name, artist: '', album: '', art: null, artType: '' }
-      const track = el('div', 'mdp-track')
       const cover = el('div', 'mdp-cover')
+      let hue = 0
+      for (const c of name) hue = (hue * 31 + c.charCodeAt(0)) % 360
+      cover.style.background = 'linear-gradient(135deg, hsl(' + hue + ', 78%, 64%), hsl(' + (hue + 45) % 360 + ', 64%, 56%) 55%, hsl(' + (hue + 95) % 360 + ', 58%, 60%))'
       cover.appendChild(icon(dom, 'note'))
-      const info = el('div', 'mdp-info')
-      const idle = (ext ? ext.toUpperCase() + ' · ' : '') + 'Audio'
-      const over = el('p', 'mdp-over', idle)
       const song = el('h3', 'mdp-song', meta.title)
-      const artist = el('p', 'mdp-artist'); artist.hidden = true
-      const album = el('p', 'mdp-album'); album.hidden = true
-      info.append(over, song, artist, album)
-      track.append(cover, info)
+      const sub = el('p', 'mdp-sub'); sub.hidden = true
+      const artist = el('span', 'mdp-artist'); artist.hidden = true
+      const dot = el('span', null, ' · '); dot.hidden = true
+      const album = el('span', 'mdp-album'); album.hidden = true
+      sub.append(artist, dot, album)
       player.setAttribute('aria-label', 'Audio player: ' + meta.title)
 
       // "Resume from m:ss", when this file was left part way through.
@@ -618,6 +640,21 @@ const pane = {
         else if (text) b.textContent = text
         b.addEventListener('click', onClick)
         return b
+      }
+      // A pill: an icon (optional) and a word, its text kept in a span so it can change.
+      const pill = (cls, iconName, text, label, onClick) => {
+        const b = el(onClick ? 'button' : 'a', 'mdp-pill' + (cls ? ' ' + cls : ''))
+        if (onClick) { b.type = 'button'; b.addEventListener('click', onClick) }
+        b.setAttribute('aria-label', label)
+        b.title = label
+        if (iconName) b.appendChild(icon(dom, iconName))
+        b.word = el('span', null, text)
+        b.appendChild(b.word)
+        return b
+      }
+      const relabel = (b, label, text) => {
+        b.setAttribute('aria-label', label); b.title = label
+        if (text != null) b.word.textContent = text
       }
       const resumeBtn = ctl('', null, 'Resume', () => { seek(saved); play(); hideResume() }, 'Resume')
       const dismiss = ctl('mdp-dismiss', 'close', 'Start from the beginning instead', () => { memo.clear(); hideResume() })
@@ -643,27 +680,62 @@ const pane = {
       const total = el('span', null, '–:––')
       times.append(elapsed, total)
 
-      // Buttons.
-      const loop = ctl('mdp-loop', 'loop', 'Repeat', () => { audio.loop = !audio.loop; loop.setAttribute('aria-pressed', String(audio.loop)) })
-      loop.setAttribute('aria-pressed', 'false')
-      let speedAt = 0
-      const speed = ctl('mdp-speed', null, 'Playback speed 1×', () => {
-        speedAt = (speedAt + 1) % SPEEDS.length
-        audio.playbackRate = audio.defaultPlaybackRate = SPEEDS[speedAt]
-        showSpeed()
-      }, '1×')
+      // Back 15 s, play or pause, forward 30 s.
       const back = ctl('mdp-skip', 'back', 'Back 15 seconds', () => skip(-15), '15')
       const playBtn = ctl('mdp-play', 'play', 'Play', () => toggle())
       const fwd = ctl('mdp-skip', 'fwd', 'Forward 30 seconds', () => skip(30), '30')
-      const muteBtn = ctl('mdp-mute', 'vol', 'Mute', () => { audio.muted = !audio.muted })
+      const transport = el('div', 'mdp-transport'); transport.append(back, playBtn, fwd)
+
+      // Speed, repeat, mute, sleep timer, download and open.
+      let speedAt = 0
+      const speed = pill('mdp-speed', null, '1×', 'Playback speed 1×, change', () => {
+        speedAt = (speedAt + 1) % SPEEDS.length
+        audio.playbackRate = audio.defaultPlaybackRate = SPEEDS[speedAt]
+        showSpeed()
+      })
+      const loop = pill('mdp-loop', 'loop', 'Loop', 'Repeat', () => { audio.loop = !audio.loop; loop.setAttribute('aria-pressed', String(audio.loop)) })
+      loop.setAttribute('aria-pressed', 'false')
+      const muteBtn = pill('mdp-mute', 'vol', 'Mute', 'Mute', () => { audio.muted = !audio.muted })
+      muteBtn.setAttribute('aria-pressed', 'false')
+      // The sleep timer: off, 15, 30, 60 minutes, then off again. It pauses when it runs out.
+      let sleepAt = 0; let sleepEnd = 0; let sleepTick = 0
+      const sleep = pill('mdp-sleep', 'moon', 'Sleep', 'Sleep timer off, set 15 minutes', () => {
+        sleepAt = (sleepAt + 1) % SLEEPS.length
+        sleepEnd = SLEEPS[sleepAt] ? Date.now() + SLEEPS[sleepAt] * 60000 : 0
+        showSleep()
+      })
+      sleep.setAttribute('aria-pressed', 'false')
+      function showSleep () {
+        if (sleepTick && win) { win.clearTimeout(sleepTick); sleepTick = 0 }
+        const left = sleepEnd - Date.now()
+        if (sleepEnd && (left <= 0 || !root.isConnected)) {
+          if (left <= 0) audio.pause()
+          sleepAt = 0; sleepEnd = 0
+        }
+        sleep.setAttribute('aria-pressed', String(!!sleepEnd))
+        if (!sleepEnd) { relabel(sleep, 'Sleep timer off, set 15 minutes', 'Sleep'); return }
+        const mins = Math.ceil(left / 60000)
+        const next = SLEEPS[(sleepAt + 1) % SLEEPS.length]
+        relabel(sleep, 'Sleep timer: pauses in ' + mins + ' min, ' + (next ? 'set ' + next + ' minutes' : 'turn off'), 'Sleep ' + mins + 'm')
+        // Wake when the minutes shown change, and right at the end.
+        if (win) sleepTick = win.setTimeout(showSleep, Math.min(15000, left % 60000 || 60000) + 20)
+      }
+      const download = pill('mdp-download', 'download', 'Download', 'Download ' + name)
+      download.href = uri
+      download.download = name // a cross-origin file ignores this and simply opens
+      download.rel = 'noopener noreferrer'
+      const openLink = pill('mdp-open', 'open', 'Open', 'Open ' + name + ' in a new tab')
+      openLink.href = uri
+      openLink.target = '_blank'
+      openLink.rel = 'noopener noreferrer'
+      const pills = el('div', 'mdp-pills'); pills.append(speed, loop, muteBtn, sleep, download, openLink)
+
+      // Volume, on its own row.
       const range = el('input', 'mdp-range')
       range.type = 'range'; range.min = '0'; range.max = '100'; range.step = '5'; range.value = '100'
       range.setAttribute('aria-label', 'Volume')
       range.addEventListener('input', () => setVolume(range.value / 100))
-      const side = el('div', 'mdp-side'); side.append(loop, speed)
-      const transport = el('div', 'mdp-transport'); transport.append(back, playBtn, fwd)
-      const vol = el('div', 'mdp-vol'); vol.append(muteBtn, range)
-      const controls = el('div', 'mdp-bar'); controls.append(side, transport, vol)
+      const vol = el('div', 'mdp-vol'); vol.append(icon(dom, 'quiet'), range, icon(dom, 'vol'))
 
       const keys = el('p', 'mdp-keys')
       const key = (ks, what) => {
@@ -674,8 +746,17 @@ const pane = {
       }
       key(['Space'], 'play or pause'); key(['←', '→'], '5 s'); key(['↑', '↓'], 'volume'); key(['M'], 'mute')
 
-      player.append(track, resume, scrub, times, controls, keys)
-      stage.append(backdrop, player, audio)
+      // Type, size and length, in one quiet line at the bottom.
+      const details = el('p', 'mdp-details')
+      details.setAttribute('aria-label', 'File details')
+      showFacts = () => {
+        const type = ext ? ext.toUpperCase() : facts.type ? facts.type.split('/').pop().replace(/^x-/, '').toUpperCase() : 'Audio'
+        details.textContent = [type, facts.size, facts.length, facts.status].filter(Boolean).join(' · ')
+      }
+      showFacts()
+
+      player.append(cover, song, sub, resume, scrub, times, transport, pills, vol, keys, details)
+      stage.append(player, audio)
 
       // ---- Playing.
       const dur = () => (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0)
@@ -838,7 +919,6 @@ const pane = {
       audio.addEventListener('play', () => {
         playBtn.replaceChildren(icon(dom, 'pause'))
         playBtn.setAttribute('aria-label', 'Pause'); playBtn.title = 'Pause'
-        over.textContent = 'Now playing'
         hideResume()
         session()
         if (ms) try { ms.playbackState = 'playing' } catch (e) {}
@@ -847,14 +927,13 @@ const pane = {
       audio.addEventListener('pause', () => {
         playBtn.replaceChildren(icon(dom, 'play'))
         playBtn.setAttribute('aria-label', 'Play'); playBtn.title = 'Play'
-        over.textContent = audio.ended ? idle : 'Paused'
         if (ms) try { ms.playbackState = 'paused' } catch (e) {}
         if (frame && win.cancelAnimationFrame) win.cancelAnimationFrame(frame)
         frame = 0
         remember()
         paint()
       })
-      audio.addEventListener('ended', () => { memo.clear(); over.textContent = idle })
+      audio.addEventListener('ended', () => { memo.clear() })
       audio.addEventListener('timeupdate', () => {
         if (!frame) paint()
         if (Date.now() - lastSave > 2000 && !audio.paused) remember()
@@ -862,17 +941,16 @@ const pane = {
       audio.addEventListener('seeked', () => { position(); if (!dragging) remember() })
       function showSpeed () {
         const r = audio.playbackRate
-        speed.textContent = r + '×'
-        speed.setAttribute('aria-label', 'Playback speed ' + r + '×, change'); speed.title = 'Playback speed ' + r + '× (click to change)'
+        relabel(speed, 'Playback speed ' + r + '×, change', r + '×')
       }
       audio.addEventListener('ratechange', () => { showSpeed(); position() })
       audio.addEventListener('volumechange', () => {
         const v = audio.muted ? 0 : audio.volume
         range.value = String(Math.round(v * 100))
         range.style.setProperty('--mdp-v', Math.round(v * 100) + '%')
-        muteBtn.replaceChildren(icon(dom, audio.muted || !audio.volume ? 'mute' : 'vol'))
-        const label = audio.muted ? 'Unmute' : 'Mute'
-        muteBtn.setAttribute('aria-label', label); muteBtn.title = label
+        muteBtn.replaceChild(icon(dom, audio.muted || !audio.volume ? 'mute' : 'vol'), muteBtn.firstChild)
+        muteBtn.setAttribute('aria-pressed', String(audio.muted))
+        relabel(muteBtn, audio.muted ? 'Unmute' : 'Mute', audio.muted ? 'Unmute' : 'Mute')
       })
       audio.addEventListener('loadedmetadata', () => {
         const d = dur()
@@ -899,6 +977,8 @@ const pane = {
         song.textContent = meta.title
         artist.textContent = meta.artist; artist.hidden = !meta.artist
         album.textContent = meta.album; album.hidden = !meta.album
+        dot.hidden = !(meta.artist && meta.album)
+        sub.hidden = !(meta.artist || meta.album)
         player.setAttribute('aria-label', 'Audio player: ' + meta.title + (meta.artist ? ', ' + meta.artist : ''))
         if (t.picture && win && win.URL && win.Blob) {
           try {
@@ -906,10 +986,10 @@ const pane = {
             meta.artType = t.picture.mime
             const img = el('img')
             img.alt = 'Cover of ' + meta.title
-            img.addEventListener('error', () => { img.remove(); backdrop.style.backgroundImage = '' })
+            img.addEventListener('error', () => { img.remove(); cover.classList.remove('mdp-has-art') })
             img.src = coverUrl
-            cover.replaceChildren(img)
-            backdrop.style.backgroundImage = 'url("' + coverUrl + '")'
+            cover.appendChild(img)
+            cover.classList.add('mdp-has-art')
           } catch (e) {}
         }
         if (!audio.paused) session()
@@ -965,13 +1045,13 @@ const pane = {
         .then(() => fetchFn(uri, { method: 'HEAD', headers: { accept: ACCEPT } }))
         .then(res => {
           if (!res || !res.ok) {
-            if (res && [401, 403, 404, 410].includes(res.status)) chip('HTTP ' + res.status)
+            if (res && [401, 403, 404, 410].includes(res.status)) chip('HTTP ' + res.status, null, 'status')
             return
           }
           const type = (res.headers.get('content-type') || '').split(';')[0].trim()
           const size = humanSize(parseInt(res.headers.get('content-length'), 10))
-          if (size) chip(size)
-          if (type) chip(type)
+          if (size) chip(size, null, 'size')
+          if (type) chip(type, null, 'type')
           else if (ext) chip(ext.toUpperCase())
           const k = kindOfType(type)
           if (k && k !== kind && !kindOfExtension(ext)) { kind = k; durationChip = null; draw() }
