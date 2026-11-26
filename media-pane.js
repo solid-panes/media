@@ -119,6 +119,16 @@ const CSS = `
 .mdp-fallback b { display: block; margin-bottom: 4px; font-size: 16px; color: #172042 }
 .mdp-fallback a { color: #1f4fa8; font-weight: 600 }
 .mdp-note { margin: 0; padding: 10px 16px; border-top: 1px solid #e9edf4; font-size: 12.5px; color: #69728a; overflow-wrap: anywhere }
+@media (min-width: 760px) {
+  .mdp-player { max-width: 820px; display: grid; grid-template-columns: 240px minmax(0, 1fr); column-gap: 32px; align-items: start; padding: 24px 28px 18px }
+  .mdp-player > * { grid-column: 2 }
+  .mdp-player > .mdp-cover { grid-column: 1; grid-row: 1 / span 20; width: 240px; align-self: start }
+  .mdp-player > .mdp-song { margin-top: 6px }
+  .mdp-player > .mdp-vol { max-width: none }
+}
+@media (max-width: 759px) {
+  .mdp-cover { width: min(100%, 260px, 30vh) }
+}
 @media (max-width: 520px) {
   .mdp { padding: 8px }
   .mdp-head { padding: 12px 12px 10px }
