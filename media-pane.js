@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Melvin Carvalho
 //
 // media-pane.js — plays a video or a sound file, or shows a picture, in the SolidOS data browser.

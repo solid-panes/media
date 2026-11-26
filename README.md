@@ -51,6 +51,6 @@ or `jss start ... --panes https://solid-panes.github.io/media/media-pane.js`.
 
 ## Licence
 
-[MIT](LICENSE), copyright Melvin Carvalho.
+[AGPL-3.0-or-later](LICENSE), copyright Melvin Carvalho.
 
 The samples are made for this repository: `tools/samples.sh` generates the video and sound with ffmpeg and tags the sound, the cover art is `tools/cover.svg`, and `samples/panes.svg` is drawn by hand. The share card (`og.png`) is rendered by `tools/og.mjs`; its font, Atkinson Hyperlegible, is under the SIL Open Font License.
