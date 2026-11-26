@@ -21,7 +21,14 @@ ffmpeg -y -loglevel error -f lavfi -i "testsrc2=size=640x360:rate=25:duration=8"
   -c:v libvpx-vp9 -b:v 0 -crf 42 -row-mt 1 -c:a libopus -b:a 48k -ac 1 test-pattern.webm
 
 # Just the arpeggio, as MP3 and as Ogg Opus.
-ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='$TONE':s=44100:d=8" -c:a libmp3lame -b:a 96k -ac 1 arpeggio.mp3
-ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='$TONE':s=48000:d=8" -c:a libopus -b:a 48k -ac 1 arpeggio.ogg
+# Both carry tags (title, artist, album); the MP3 also carries cover art (ID3v2.3 APIC), drawn in
+# tools/cover.svg and rendered with rsvg-convert.
+rsvg-convert -w 300 -h 300 ../tools/cover.svg -o /tmp/arpeggio-cover.png
+ffmpeg -y -loglevel error -i /tmp/arpeggio-cover.png -q:v 4 /tmp/arpeggio-cover.jpg
+ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='$TONE':s=44100:d=8" -i /tmp/arpeggio-cover.jpg \
+  -map 0:a -map 1:v -c:a libmp3lame -b:a 96k -ac 1 -c:v copy -id3v2_version 3 -metadata title=Arpeggio -metadata artist='Solid panes' -metadata album=Samples \
+  -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)' -disposition:v attached_pic arpeggio.mp3
+ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='$TONE':s=48000:d=8" -c:a libopus -b:a 48k -ac 1 -metadata title=Arpeggio -metadata artist='Solid panes' -metadata album=Samples arpeggio.ogg
+rm -f /tmp/arpeggio-cover.png /tmp/arpeggio-cover.jpg
 
 ls -l
